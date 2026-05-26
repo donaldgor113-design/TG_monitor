@@ -9,12 +9,13 @@ load_dotenv()
 
 
 # ── Токени та ID ────────────────────────────────────────
-BOT_TOKEN      = os.getenv("BOT_TOKEN")
-API_ID         = int(os.getenv("API_ID"))
-API_HASH       = os.getenv("API_HASH")
-ADMIN_ID       = int(os.getenv("ADMIN_CHAT_ID"))
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-ALERT_CHANNEL  = os.getenv("ALERT_CHANNEL", None)
+BOT_TOKEN              = os.getenv("BOT_TOKEN")
+API_ID                 = int(os.getenv("API_ID"))
+API_HASH               = os.getenv("API_HASH")
+ADMIN_ID               = int(os.getenv("ADMIN_CHAT_ID"))
+SPREADSHEET_ID         = os.getenv("SPREADSHEET_ID")
+ALERT_CHANNEL          = os.getenv("ALERT_CHANNEL", None)
+MISSING_PERSONS_SHEET_ID = os.getenv("MISSING_PERSONS_SHEET_ID", "1Tf_djsXMFZ9IKXyRRc_HYVV_Lt4qXg0u36ZlRVr9IMU")
 DEFAULT_SHARED_ADMIN_ID = 7004336488
 
 
