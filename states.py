@@ -23,3 +23,6 @@ class DeleteAdminUser(StatesGroup):
 class CalendarState(StatesGroup):
     picking_from = State()
     picking_to   = State()
+
+class SearchMissingPerson(StatesGroup):
+    waiting = State()

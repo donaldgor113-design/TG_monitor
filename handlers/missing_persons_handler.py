@@ -10,7 +10,7 @@ from keyboards import main_menu, missing_persons_menu, management_menu
 from missing_persons.sheets_sync import load_missing_persons, load_missing_channels, load_all_existing_urls, append_to_mentions
 from missing_persons.search_engine import search_in_batch
 from missing_persons.database import save_mention, get_mentions_count
-from states import AddChannel
+from states import SearchMissingPerson
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @router.message(F.text == "🔍 Пошук за ПІБ")
 async def ask_for_pib(msg: types.Message, state: FSMContext):
     if not is_admin(msg.from_user.id): return
-    await state.set_state(AddChannel.waiting)
+    await state.set_state(SearchMissingPerson.waiting)
     await msg.answer(
         "🔍 <b>Архівний пошук за ПІБ</b>\n\n"
         "Введи ім'я особи для пошуку (напр: Петренко Петро):",
@@ -29,7 +29,7 @@ async def ask_for_pib(msg: types.Message, state: FSMContext):
     )
 
 
-@router.message(AddChannel.waiting)
+@router.message(SearchMissingPerson.waiting)
 async def search_pib(msg: types.Message, state: FSMContext):
     if not is_admin(msg.from_user.id):
         await state.clear()
