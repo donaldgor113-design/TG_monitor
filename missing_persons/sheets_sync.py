@@ -7,6 +7,22 @@ from typing import List, Dict, Set
 logger = logging.getLogger(__name__)
 
 
+def detect_status_from_text(text: str) -> str:
+    """Аналізує текст і визначає статус особи."""
+    text_lower = text.lower()
+
+    if any(word in text_lower for word in ["знайдено", "знаходиться", "виявлено", "знайшли", "в безпеці", "живий", "живий тепер"]):
+        return "знайдено і в безпеці"
+    elif any(word in text_lower for word in ["полон", "в полоні", "захоплен", "в полоні", "полоняник"]):
+        return "полон"
+    elif any(word in text_lower for word in ["загинув", "помер", "померла", "загибель", "убит", "убита", "убитий", "вбитий"]):
+        return "загинув"
+    elif any(word in text_lower for word in ["безвісти", "зникав", "не знайдено", "невідомо де", "невідомих місцеперебування"]):
+        return "безвісти зниклий"
+    else:
+        return ""
+
+
 def get_spreadsheet():
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -29,9 +45,16 @@ def load_missing_persons() -> Dict[str, str]:
 
         persons = {}
         for row in all_values[1:]:
-            if len(row) >= 3:
-                pib = row[0].strip()
-                status = row[2].strip().lower()
+            if len(row) >= 6:
+                surname = row[1].strip() if len(row) > 1 else ""
+                name = row[2].strip() if len(row) > 2 else ""
+                patronymic = row[3].strip() if len(row) > 3 else ""
+                status = row[5].strip().lower() if len(row) > 5 else ""
+
+                pib = f"{surname} {name}".strip()
+                if patronymic:
+                    pib = f"{pib} {patronymic}"
+
                 if pib and status == "missing":
                     persons[pib] = status
         logger.info(f"📋 Завантажено {len(persons)} осіб зі статусом 'missing'")
@@ -72,18 +95,29 @@ def append_to_mentions(mentions: List[Dict]):
         ws = spreadsheet.worksheet("Mentions")
 
         for mention in mentions:
+            pib = mention.get("pib", "").strip()
+            parts = pib.split()
+            surname = parts[0] if len(parts) > 0 else ""
+            name = parts[1] if len(parts) > 1 else ""
+            patronymic = parts[2] if len(parts) > 2 else ""
+
+            text = mention.get("text", "")[:300]
+            status = detect_status_from_text(text)
+
             row = [
-                "",  # Колона A: № (автоматично нумерується)
-                mention.get("pib", ""),
+                "",  # Колона A: № (автоматично)
+                surname,
+                name,
+                patronymic,
+                status,  # Статус, визначений автоматично
                 mention.get("channel", ""),
                 mention.get("date", ""),
                 mention.get("time", ""),
-                mention.get("text", "")[:300],
+                text,
                 mention.get("url", ""),
-                mention.get("mention_type", "missing"),
             ]
             ws.append_row(row)
-            logger.info(f"✅ Запис додано: {mention['pib']} в {mention['channel']}")
+            logger.info(f"✅ Запис додано: {pib} в {mention['channel']} | Статус: {status or 'не визначено'}")
 
         return True
     except Exception as e:
@@ -100,8 +134,8 @@ def load_all_existing_urls() -> Set[str]:
         urls = set()
         if len(all_values) > 1:
             for row in all_values[1:]:
-                if len(row) >= 7:
-                    url = row[6].strip()  # Колона G (індекс 6) через наявність колони № в A
+                if len(row) >= 10:
+                    url = row[9].strip()  # Колона J (індекс 9) - URL
                     if url:
                         urls.add(url)
         logger.info(f"✅ Завантажено {len(urls)} URL з листа Mentions")
