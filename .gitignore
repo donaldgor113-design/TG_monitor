@@ -15,4 +15,5 @@ credentials.json
 monitor_session.session
 monitor_session.session-journal
 monitor_data.json
+missing_persons.db
 adm/
