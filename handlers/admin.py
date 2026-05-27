@@ -5,10 +5,11 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardRemove
 
-from config import get_admin_ids, get_owner_ids, is_admin, is_owner, load_data, save_data
-from keyboards import main_menu, classifier_mode_keyboard
+from config import get_admin_ids, get_owner_ids, is_admin, is_owner, load_data, save_data, notify_owners
+from keyboards import main_menu, management_menu, missing_persons_menu, classifier_mode_keyboard
 from keywords import get_classifier_mode_label
 from states import AddAdminUser, AddChannel, AddKeyword, DeleteAdminUser, DeleteChannel, DeleteKeyword
+from monitoring import live
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -52,6 +53,69 @@ async def status(msg: types.Message):
         f"🔍 <b>Архів:</b> каналів {len(arc_ch)}, ключів {len(arc_kw)}\n"
         f"📅 <b>Період архіву:</b> {date_from} — {date_to}",
         parse_mode="HTML"
+    )
+
+
+# ── Управління ──────────────────────────────────────────
+@router.message(F.text == "⚙️ Управління")
+async def management_menu_show(msg: types.Message):
+    if not is_admin(msg.from_user.id): return
+    d = load_data()
+    await msg.answer(
+        "⚙️ <b>Управління</b>",
+        parse_mode="HTML",
+        reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d))
+    )
+
+
+# ── Пошук зниклих ───────────────────────────────────────
+@router.message(F.text == "🆘 Пошук зниклих")
+async def missing_persons_menu_show(msg: types.Message):
+    if not is_admin(msg.from_user.id): return
+    await msg.answer(
+        "🆘 <b>Пошук зниклих осіб</b>\n\n"
+        "Моніторинг та пошук людей в каналах Telegram",
+        parse_mode="HTML",
+        reply_markup=missing_persons_menu()
+    )
+
+
+# ── Назад ────────────────────────────────────────────────
+@router.message(F.text == "◀️ Назад")
+async def go_back(msg: types.Message):
+    if not is_admin(msg.from_user.id): return
+    d = load_data()
+    await msg.answer(
+        "👋 Повернувся на головне меню",
+        reply_markup=main_menu(is_owner=is_owner(msg.from_user.id, d))
+    )
+
+
+# ── Стоп ─────────────────────────────────────────────────
+@router.message(F.text == "⏹ Стоп")
+async def stop_monitoring(msg: types.Message):
+    if not is_admin(msg.from_user.id): return
+    d = load_data()
+    was_live = d.get("monitoring", False)
+    was_archive = d.get("archive_running", False)
+
+    d["monitoring"] = False
+    d["archive_running"] = False
+    save_data(d)
+    live._stop_polling()
+
+    status = ""
+    if was_live:
+        status += "🟢 Live моніторинг зупинено\n"
+    if was_archive:
+        status += "🔍 Архівний пошук зупинено\n"
+    if not was_live and not was_archive:
+        status = "Моніторинг вже зупинений"
+
+    await msg.answer(
+        f"⏹ <b>Зупинено</b>\n\n{status}",
+        parse_mode="HTML",
+        reply_markup=main_menu(is_owner=is_owner(msg.from_user.id, d))
     )
 
 
@@ -125,13 +189,13 @@ async def ask_add_user(msg: types.Message, state: FSMContext):
 async def add_user(msg: types.Message, state: FSMContext):
     d = load_data()
     if not is_owner(msg.from_user.id, d):
-        await msg.answer("⛔ Додавати користувачів можуть тільки власники.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("⛔ Додавати користувачів можуть тільки власники.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
         await state.clear()
         return
     try:
         user_id = int(msg.text.strip())
     except ValueError:
-        await msg.answer("❌ Потрібно ввести числовий Telegram ID.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("❌ Потрібно ввести числовий Telegram ID.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
         await state.clear()
         return
     admins = get_admin_ids(d)
@@ -139,9 +203,9 @@ async def add_user(msg: types.Message, state: FSMContext):
         admins.append(user_id)
         d["admin_ids"] = admins
         save_data(d)
-        await msg.answer(f"✅ Користувача <code>{user_id}</code> додано.", parse_mode="HTML", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"✅ Користувача <code>{user_id}</code> додано.", parse_mode="HTML", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     else:
-        await msg.answer(f"Користувач <code>{user_id}</code> уже має доступ.", parse_mode="HTML", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"Користувач <code>{user_id}</code> уже має доступ.", parse_mode="HTML", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     await state.clear()
 
 
@@ -161,27 +225,27 @@ async def ask_delete_user(msg: types.Message, state: FSMContext):
 async def delete_user(msg: types.Message, state: FSMContext):
     d = load_data()
     if not is_owner(msg.from_user.id, d):
-        await msg.answer("⛔ Видаляти користувачів можуть тільки власники.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("⛔ Видаляти користувачів можуть тільки власники.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
         await state.clear()
         return
     try:
         user_id = int(msg.text.strip())
     except ValueError:
-        await msg.answer("❌ Потрібно ввести числовий Telegram ID.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("❌ Потрібно ввести числовий Telegram ID.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
         await state.clear()
         return
     owners = get_owner_ids(d)
     admins = get_admin_ids(d)
     if user_id in owners:
-        await msg.answer("⛔ Не можна видалити власника зі списку доступу.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("⛔ Не можна видалити власника зі списку доступу.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
         await state.clear()
         return
     if user_id in admins:
         d["admin_ids"] = [uid for uid in admins if uid != user_id]
         save_data(d)
-        await msg.answer(f"✅ Користувача <code>{user_id}</code> видалено.", parse_mode="HTML", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"✅ Користувача <code>{user_id}</code> видалено.", parse_mode="HTML", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     else:
-        await msg.answer(f"Користувача <code>{user_id}</code> не знайдено.", parse_mode="HTML", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"Користувача <code>{user_id}</code> не знайдено.", parse_mode="HTML", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     await state.clear()
 
 
@@ -230,9 +294,9 @@ async def add_channel(msg: types.Message, state: FSMContext):
             added.append(ch)
     save_data(d)
     if added:
-        await msg.answer(f"✅ Додано: {', '.join('@'+c for c in added)}", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"✅ Додано: {', '.join('@'+c for c in added)}", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     else:
-        await msg.answer("Всі ці канали вже є у списку.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("Всі ці канали вже є у списку.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     await state.clear()
 
 
@@ -254,9 +318,9 @@ async def add_keyword(msg: types.Message, state: FSMContext):
             added.append(kw)
     save_data(d)
     if added:
-        await msg.answer(f"✅ Додано слова: {', '.join(added)}", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"✅ Додано слова: {', '.join(added)}", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     else:
-        await msg.answer("Всі ці слова вже є у списку.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer("Всі ці слова вже є у списку.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     await state.clear()
 
 
@@ -281,9 +345,9 @@ async def confirm_delete_channel(msg: types.Message, state: FSMContext):
         d["live_active_channels"] = [c for c in d.get("live_active_channels", []) if c != ch]
         d["arc_active_channels"]  = [c for c in d.get("arc_active_channels",  []) if c != ch]
         save_data(d)
-        await msg.answer(f"✅ Канал @{ch} видалено!", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"✅ Канал @{ch} видалено!", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     else:
-        await msg.answer(f"Канал @{ch} не знайдено.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"Канал @{ch} не знайдено.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     await state.clear()
 
 
@@ -308,7 +372,7 @@ async def confirm_delete_keyword(msg: types.Message, state: FSMContext):
         d["live_active_keywords"] = [k for k in d.get("live_active_keywords", []) if k != kw]
         d["arc_active_keywords"]  = [k for k in d.get("arc_active_keywords",  []) if k != kw]
         save_data(d)
-        await msg.answer(f"✅ Слово «{kw}» видалено!", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"✅ Слово «{kw}» видалено!", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     else:
-        await msg.answer(f"Слово «{kw}» не знайдено.", reply_markup=_menu_for(msg.from_user.id, d))
+        await msg.answer(f"Слово «{kw}» не знайдено.", reply_markup=management_menu(is_owner=is_owner(msg.from_user.id, d)))
     await state.clear()

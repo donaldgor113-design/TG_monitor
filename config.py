@@ -14,6 +14,7 @@ API_ID         = int(os.getenv("API_ID"))
 API_HASH       = os.getenv("API_HASH")
 ADMIN_ID       = int(os.getenv("ADMIN_CHAT_ID"))
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
+MISSING_PERSONS_SHEET_ID = os.getenv("MISSING_PERSONS_SHEET_ID")
 ALERT_CHANNEL  = os.getenv("ALERT_CHANNEL", None)
 DEFAULT_SHARED_ADMIN_ID = 7004336488
 

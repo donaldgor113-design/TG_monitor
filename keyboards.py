@@ -14,14 +14,34 @@ def main_menu(is_owner: bool = False) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="📋 Статус"),          KeyboardButton(text="🔍 Пошук по архіву")],
         [KeyboardButton(text="🟢 Моніторинг live"), KeyboardButton(text="⏹ Стоп")],
+        [KeyboardButton(text="⚙️ Управління"),       KeyboardButton(text="🆘 Пошук зниклих")],
+    ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+# ── Меню управління ─────────────────────────────────────
+def management_menu(is_owner: bool = False) -> ReplyKeyboardMarkup:
+    keyboard = [
         [KeyboardButton(text="📡 Канали"),           KeyboardButton(text="🔑 Ключові слова")],
         [KeyboardButton(text="📅 Період"),           KeyboardButton(text="➕ Додати канал")],
-        [KeyboardButton(text="➕ Додати слово"),     KeyboardButton(text="🗑 Видалити канал")],
+        [KeyboardButton(text="🗑 Видалити канал"),   KeyboardButton(text="➕ Додати слово")],
         [KeyboardButton(text="🗑 Видалити слово"),   KeyboardButton(text="🧠 Логіка пошуку")],
         [KeyboardButton(text="👥 Користувачі")],
     ]
     if is_owner:
         keyboard.append([KeyboardButton(text="➕ Додати користувача"), KeyboardButton(text="🗑 Видалити користувача")])
+    keyboard.append([KeyboardButton(text="◀️ Назад")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+# ── Меню пошуку зниклих ─────────────────────────────────
+def missing_persons_menu() -> ReplyKeyboardMarkup:
+    keyboard = [
+        [KeyboardButton(text="🔍 Пошук за ПІБ")],
+        [KeyboardButton(text="📊 Статистика зниклих")],
+        [KeyboardButton(text="ℹ️ Інформація")],
+        [KeyboardButton(text="◀️ Назад")],
+    ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 

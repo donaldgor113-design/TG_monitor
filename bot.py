@@ -6,8 +6,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN, notify_owners, load_data
 from client import userbot
+from missing_persons.live_scheduler import init_scheduler, start_scheduler, stop_scheduler
 
-from handlers import admin, calendar
+from handlers import admin, calendar, missing_persons_handler
 from monitoring import archive, live
 
 bot = Bot(token=BOT_TOKEN)
@@ -17,12 +18,17 @@ dp.include_router(admin.router)
 dp.include_router(calendar.router)
 dp.include_router(archive.router)
 dp.include_router(live.router)
+dp.include_router(missing_persons_handler.router)
 
 
 async def main():
     await userbot.start()
 
     d = load_data()
+
+    # ── Ініціалізація scheduler для пошуку зниклих ──
+    scheduler = init_scheduler(bot)
+    start_scheduler()
 
     # ── Якщо live був активний до падіння — відновлюємо ──
     if d.get("monitoring") and d.get("live_active_channels") and d.get("live_active_keywords"):
