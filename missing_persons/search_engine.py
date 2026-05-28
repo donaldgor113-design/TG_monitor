@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_in_channel(channel: str, person_names: Dict[str, str],
-                           existing_urls: Set[str], limit: int = 50) -> List[Dict]:
+                           existing_urls: Set[str], limit: int = 300) -> List[Dict]:
     mentions = []
     try:
         async for message in userbot.iter_messages(channel, limit=limit):
@@ -29,8 +29,8 @@ async def search_in_channel(channel: str, person_names: Dict[str, str],
                         "message_id": message.id,
                         "url": url,
                         "text": escape_html(message.text),
-                        "date": message.date.strftime("%d.%m"),
-                        "time": message.date.strftime("%H:%M"),
+                        "date": message.date.strftime("%d.%m.%Y"),
+                        "time": message.date.strftime("%H:%M:%S"),
                         "mention_type": "missing",
                     }
                     mentions.append(mention)
@@ -49,7 +49,7 @@ async def search_in_channel(channel: str, person_names: Dict[str, str],
 
 async def search_in_batch(channels: List[str], person_names: Dict[str, str],
                           existing_urls: Set[str], batch_size: int = 5,
-                          batch_pause: int = 30, channel_delay: float = 2) -> List[Dict]:
+                          batch_pause: int = 45, channel_delay: float = 3) -> List[Dict]:
     all_mentions = []
 
     for i in range(0, len(channels), batch_size):

@@ -2,7 +2,8 @@ import logging
 import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from missing_persons.sheets_sync import (
-    load_missing_persons, load_missing_channels, append_to_mentions, load_all_existing_urls
+    load_missing_persons, load_missing_channels, append_to_mentions,
+    load_all_existing_urls, detect_status_from_text
 )
 from missing_persons.search_engine import search_in_batch
 from missing_persons.database import save_mention
@@ -49,11 +50,26 @@ async def run_live_search(bot=None):
 
         if bot:
             from config import get_owner_ids
-            text = f"🎯 <b>Live пошук зниклих</b>\n\nЗнайдено {len(mentions)} згадок:\n"
-            for m in mentions[:5]:
-                text += f"• {m['pib']} в @{m['channel']}\n"
-            if len(mentions) > 5:
-                text += f"+ ще {len(mentions) - 5}..."
+            text = (
+                f"🎯 <b>Live пошук зниклих</b>\n"
+                f"📡 Перевірено каналів: <b>{len(channels)}</b> (до 300 публікацій кожен)\n"
+                f"👥 Знайдено згадок: <b>{len(mentions)}</b>\n\n"
+            )
+            for i, m in enumerate(mentions[:10], 1):
+                channel = m['channel']
+                status = detect_status_from_text(m['text'])
+                status_str = status if status else "не визначено"
+                short_text = m['text'][:200].replace('\n', ' ')
+                text += (
+                    f"{i}. 👤 <b>{m['pib']}</b>\n"
+                    f"   📢 <a href=\"https://t.me/{channel}\">@{channel}</a> | {m['date']} {m['time']}\n"
+                    f"   🔗 <a href=\"{m['url']}\">Посилання на публікацію</a>\n"
+                    f"   🏷 Статус: <b>{status_str}</b>\n"
+                    f"   📝 {short_text}...\n\n"
+                )
+            if len(mentions) > 10:
+                text += f"+ ще {len(mentions) - 10} результатів\n\n"
+            text += "✅ Всі результати записані в Google Sheets 'Mentions'"
 
             for owner_id in get_owner_ids():
                 try:

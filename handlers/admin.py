@@ -21,10 +21,11 @@ def _menu_for(user_id: int, data: dict | None = None):
 
 # ── /start ──────────────────────────────────────────────
 @router.message(Command("start"))
-async def cmd_start(msg: types.Message):
+async def cmd_start(msg: types.Message, state: FSMContext):
     if not is_admin(msg.from_user.id):
         await msg.answer("⛔ У тебе немає доступу до цього бота.")
         return
+    await state.clear()
     await msg.answer("👋 Привіт! Я бот-монітор Telegram каналів.", reply_markup=_menu_for(msg.from_user.id))
 
 

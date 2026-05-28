@@ -7,7 +7,7 @@ from aiogram.types import ReplyKeyboardRemove
 
 from config import is_admin, load_data, save_data, notify_owners
 from keyboards import main_menu, missing_persons_menu, management_menu
-from missing_persons.sheets_sync import load_missing_persons, load_missing_channels, load_all_existing_urls, append_to_mentions
+from missing_persons.sheets_sync import load_missing_persons, load_missing_channels, load_all_existing_urls, append_to_mentions, detect_status_from_text
 from missing_persons.search_engine import search_in_batch
 from missing_persons.database import save_mention, get_mentions_count
 from states import SearchMissingPerson
@@ -93,13 +93,25 @@ async def search_pib(msg: types.Message, state: FSMContext):
                     mention_type="manual_search"
                 )
 
-            result_text = f"🎯 <b>Знайдено {len(mentions)} згадок про {pib}:</b>\n\n"
-            for i, m in enumerate(mentions[:10], 1):
-                result_text += f"{i}. <b>@{m['channel']}</b> | {m['date']} {m['time']}\n"
-            if len(mentions) > 10:
-                result_text += f"\n+ ще {len(mentions) - 10} результатів\n"
+            result_text = (
+                f"🎯 <b>Знайдено {len(mentions)} згадок про {pib}:</b>\n"
+                f"📡 Перевірено каналів: <b>{len(channels)}</b> (до 300 публікацій кожен)\n\n"
+            )
+            for i, m in enumerate(mentions[:5], 1):
+                channel = m['channel']
+                status = detect_status_from_text(m['text'])
+                status_str = status if status else "не визначено"
+                short_text = m['text'][:200].replace('\n', ' ')
+                result_text += (
+                    f"{i}. 📢 <a href=\"https://t.me/{channel}\">@{channel}</a> | {m['date']} {m['time']}\n"
+                    f"   🔗 <a href=\"{m['url']}\">Посилання на публікацію</a>\n"
+                    f"   🏷 Статус: <b>{status_str}</b>\n"
+                    f"   📝 {short_text}...\n\n"
+                )
+            if len(mentions) > 5:
+                result_text += f"+ ще {len(mentions) - 5} результатів\n\n"
 
-            result_text += f"\n✅ Всі результати записані в Google Sheets 'Mentions'"
+            result_text += "✅ Всі результати записані в Google Sheets 'Mentions'"
 
             await msg.answer(result_text, parse_mode="HTML", reply_markup=missing_persons_menu())
         else:
