@@ -50,7 +50,7 @@ def get_spreadsheet():
 def load_missing_persons() -> Dict[str, str]:
     try:
         spreadsheet = get_spreadsheet()
-        ws = spreadsheet.worksheet("Missing Persons")
+        ws = spreadsheet.worksheet("missing persons")
         all_values = ws.get_all_values()
 
         if len(all_values) <= 1:
@@ -107,7 +107,7 @@ def update_missing_person_found(pib: str, mention_text: str = ""):
     """Оновлює статус особи в Missing Persons таблиці після знаходження публікації."""
     try:
         spreadsheet = get_spreadsheet()
-        ws = spreadsheet.worksheet("Missing Persons")
+        ws = spreadsheet.worksheet("missing persons")
         mentions_ws = spreadsheet.worksheet("Mentions")
 
         all_values = ws.get_all_values()
