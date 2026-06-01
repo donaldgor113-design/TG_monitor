@@ -64,12 +64,16 @@ def load_missing_persons() -> Dict[str, 'PersonData']:
 
         persons = {}
         for row in all_values[1:]:
-            if len(row) >= 6:
+            if len(row) >= 8:
+                # Індекси після додання колонок:
+                # 0: ID, 1: Прізвище, 2: Ім'я, 3: По-батькові,
+                # 4: Дата народження, 5: Додано, 6: Розшукується з:, 7: Статус
                 surname = row[1].strip() if len(row) > 1 else ""
                 name = row[2].strip() if len(row) > 2 else ""
                 patronymic = row[3].strip() if len(row) > 3 else ""
-                status = row[5].strip().lower() if len(row) > 5 else ""
                 birth_date = row[4].strip() if len(row) > 4 else ""
+                missing_from_date = row[6].strip() if len(row) > 6 else ""
+                status = row[7].strip().lower() if len(row) > 7 else ""
 
                 if surname and name and status == "missing":
                     full_name = f"{surname} {name}".strip()
@@ -81,6 +85,7 @@ def load_missing_persons() -> Dict[str, 'PersonData']:
                         name=name,
                         patronymic=patronymic,
                         birth_date=birth_date,
+                        missing_from_date=missing_from_date,
                         status=status
                     )
         logger.info(f"📋 Завантажено {len(persons)} осіб зі статусом 'missing'")
@@ -135,6 +140,7 @@ def update_missing_person_found(pib: str, mention_text: str = ""):
 
         for idx, row in enumerate(all_values[1:], start=2):
             if len(row) >= 4:
+                # Індекси: 1: Прізвище, 2: Ім'я, 3: По-батькові
                 row_surname = row[1].strip() if len(row) > 1 else ""
                 row_name = row[2].strip() if len(row) > 2 else ""
                 row_patronymic = row[3].strip() if len(row) > 3 else ""
@@ -146,23 +152,26 @@ def update_missing_person_found(pib: str, mention_text: str = ""):
                     updates = {}
                     current_count = 0
 
-                    # Встановлюємо "Знайдено" в колонці H
-                    if len(row) > 7:
-                        updates[f"H{idx}"] = "Знайдено"
-
+                    # Встановлюємо "Знайдено" в колонці J (раніше H)
                     if len(row) > 9:
-                        current_count = int(row[9].strip()) if row[9].strip().isdigit() else 0
-                        new_count = current_count + 1
-                        updates[f"J{idx}"] = str(new_count)
+                        updates[f"J{idx}"] = "Знайдено"
 
-                    if len(row) > 8:
+                    # Обновляємо кількість публікацій в колонці L (раніше J)
+                    if len(row) > 11:
+                        current_count = int(row[11].strip()) if row[11].strip().isdigit() else 0
+                        new_count = current_count + 1
+                        updates[f"L{idx}"] = str(new_count)
+
+                    # Обновляємо посилання на публікації в колонці K (раніше I)
+                    if len(row) > 10:
                         new_count = current_count + 1
                         hyperlink = f'=HYPERLINK("https://docs.google.com/spreadsheets/d/{MISSING_PERSONS_SHEET_ID}/edit#gid={mentions_gid}", "Див. Mentions ({new_count} публікацій)")'
-                        updates[f"I{idx}"] = hyperlink
+                        updates[f"K{idx}"] = hyperlink
 
-                    if len(row) > 10 and mention_text:
+                    # Обновляємо текст публікації в колонці M (раніше K)
+                    if len(row) > 12 and mention_text:
                         short_text = mention_text[:300].replace('\n', ' ')
-                        updates[f"K{idx}"] = short_text
+                        updates[f"M{idx}"] = short_text
 
                     if updates:
                         ws.batch_update(updates)

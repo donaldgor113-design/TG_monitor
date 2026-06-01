@@ -36,6 +36,7 @@ class PersonData:
     name: str
     patronymic: str
     birth_date: str = ""
+    missing_from_date: str = ""
     status: str = "missing"
 
     def get_full_name(self) -> str:
@@ -43,6 +44,43 @@ class PersonData:
         if self.patronymic:
             parts.append(self.patronymic)
         return " ".join(filter(None, parts))
+
+    def is_publication_relevant(self, pub_date: str) -> bool:
+        """Перевіряє, чи публікація релевантна (після дати коли людина зникла)."""
+        if not self.missing_from_date:
+            return True  # Якщо дата не встановлена, всі публікації релевантні
+
+        try:
+            from datetime import datetime
+            # Конвертуємо дати в формат YYYY-MM-DD якщо потребується
+            pub = self._parse_date(pub_date)
+            missing = self._parse_date(self.missing_from_date)
+
+            if pub and missing:
+                return pub >= missing
+        except:
+            pass
+
+        return True  # При помилці вважаємо релевантною
+
+    @staticmethod
+    def _parse_date(date_str: str):
+        """Парсить дату різних форматів (DD.MM.YYYY, YYYY-MM-DD)."""
+        if not date_str:
+            return None
+
+        try:
+            from datetime import datetime
+            # Спробуємо DD.MM.YYYY
+            if "." in date_str:
+                return datetime.strptime(date_str.strip(), "%d.%m.%Y")
+            # Спробуємо YYYY-MM-DD
+            elif "-" in date_str:
+                return datetime.strptime(date_str.strip(), "%Y-%m-%d")
+        except:
+            pass
+
+        return None
 
 
 def normalize_text(text: str) -> str:

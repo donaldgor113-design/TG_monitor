@@ -22,6 +22,11 @@ async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
                 continue
 
             for full_name, person in person_names.items():
+                # Перевіряємо, чи дата публікації після дати коли людина зникла
+                pub_date = message.date.strftime("%d.%m.%Y")
+                if not person.is_publication_relevant(pub_date):
+                    continue
+
                 found, match_detail = search_person_in_text(message.text, person)
                 if found:
                     mention = {
@@ -30,13 +35,13 @@ async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
                         "message_id": message.id,
                         "url": url,
                         "text": escape_html(message.text),
-                        "date": message.date.strftime("%d.%m.%Y"),
+                        "date": pub_date,
                         "time": message.date.strftime("%H:%M:%S"),
                         "mention_type": "missing",
                         "match_detail": match_detail,
                     }
                     mentions.append(mention)
-                    logger.info(f"🎯 Знайдено: {full_name} ({match_detail}) в {channel}")
+                    logger.info(f"🎯 Знайдено: {full_name} ({match_detail}) в {channel} ({pub_date})")
                     break
 
     except FloodWaitError as e:
