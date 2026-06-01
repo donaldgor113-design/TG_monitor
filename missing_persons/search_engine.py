@@ -3,13 +3,13 @@ import asyncio
 from typing import List, Dict, Set
 from telethon.errors import FloodWaitError
 from client import userbot
-from missing_persons.utils import search_name_in_text, escape_html
+from missing_persons.utils import search_person_in_text, escape_html, PersonData
 from missing_persons.database import check_url_exists
 
 logger = logging.getLogger(__name__)
 
 
-async def search_in_channel(channel: str, person_names: Dict[str, str],
+async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
                            existing_urls: Set[str], limit: int = 300) -> List[Dict]:
     mentions = []
     try:
@@ -21,8 +21,9 @@ async def search_in_channel(channel: str, person_names: Dict[str, str],
             if url in existing_urls or check_url_exists(url):
                 continue
 
-            for full_name in person_names.keys():
-                if search_name_in_text(message.text, full_name):
+            for full_name, person in person_names.items():
+                found, match_detail = search_person_in_text(message.text, person)
+                if found:
                     mention = {
                         "pib": full_name,
                         "channel": channel,
@@ -32,9 +33,10 @@ async def search_in_channel(channel: str, person_names: Dict[str, str],
                         "date": message.date.strftime("%d.%m.%Y"),
                         "time": message.date.strftime("%H:%M:%S"),
                         "mention_type": "missing",
+                        "match_detail": match_detail,
                     }
                     mentions.append(mention)
-                    logger.info(f"🎯 Знайдено: {full_name} в {channel}")
+                    logger.info(f"🎯 Знайдено: {full_name} ({match_detail}) в {channel}")
                     break
 
     except FloodWaitError as e:
@@ -47,7 +49,7 @@ async def search_in_channel(channel: str, person_names: Dict[str, str],
     return mentions
 
 
-async def search_in_batch(channels: List[str], person_names: Dict[str, str],
+async def search_in_batch(channels: List[str], person_names: Dict[str, PersonData],
                           existing_urls: Set[str], batch_size: int = 5,
                           batch_pause: int = 45, channel_delay: float = 3) -> List[Dict]:
     all_mentions = []

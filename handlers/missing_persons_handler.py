@@ -10,6 +10,7 @@ from keyboards import main_menu, missing_persons_menu, management_menu
 from missing_persons.sheets_sync import load_missing_persons, load_missing_channels, load_all_existing_urls, append_to_mentions, detect_status_from_text
 from missing_persons.search_engine import search_in_batch
 from missing_persons.database import save_mention, get_mentions_count
+from missing_persons.utils import PersonData
 from states import SearchMissingPerson
 
 router = Router()
@@ -62,7 +63,14 @@ async def search_pib(msg: types.Message, state: FSMContext):
             return
 
         # Пошук з таймаутом
-        persons = {pib: "missing"}
+        parts = pib.split()
+        person = PersonData(
+            surname=parts[0] if len(parts) > 0 else "",
+            name=parts[1] if len(parts) > 1 else "",
+            patronymic=parts[2] if len(parts) > 2 else "",
+            status="missing"
+        )
+        persons = {pib: person}
         try:
             mentions = await asyncio.wait_for(
                 search_in_batch(channels, persons, existing_urls),

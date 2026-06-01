@@ -2,7 +2,10 @@ import logging
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from config import MISSING_PERSONS_SHEET_ID
-from typing import List, Dict, Set
+from typing import List, Dict, Set, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from missing_persons.utils import PersonData
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,9 @@ def get_spreadsheet():
     return client.open_by_key(MISSING_PERSONS_SHEET_ID)
 
 
-def load_missing_persons() -> Dict[str, str]:
+def load_missing_persons() -> Dict[str, 'PersonData']:
+    from missing_persons.utils import PersonData
+
     try:
         spreadsheet = get_spreadsheet()
         ws = spreadsheet.worksheet("missing persons")
@@ -64,13 +69,20 @@ def load_missing_persons() -> Dict[str, str]:
                 name = row[2].strip() if len(row) > 2 else ""
                 patronymic = row[3].strip() if len(row) > 3 else ""
                 status = row[5].strip().lower() if len(row) > 5 else ""
+                birth_date = row[4].strip() if len(row) > 4 else ""
 
-                pib = f"{surname} {name}".strip()
-                if patronymic:
-                    pib = f"{pib} {patronymic}"
+                if surname and name and status == "missing":
+                    full_name = f"{surname} {name}".strip()
+                    if patronymic:
+                        full_name = f"{full_name} {patronymic}"
 
-                if pib and status == "missing":
-                    persons[pib] = status
+                    persons[full_name] = PersonData(
+                        surname=surname,
+                        name=name,
+                        patronymic=patronymic,
+                        birth_date=birth_date,
+                        status=status
+                    )
         logger.info(f"📋 Завантажено {len(persons)} осіб зі статусом 'missing'")
         return persons
     except Exception as e:
