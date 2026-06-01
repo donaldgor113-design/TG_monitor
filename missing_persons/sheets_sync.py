@@ -118,6 +118,9 @@ def load_missing_channels() -> List[str]:
 def update_missing_person_found(pib: str, mention_text: str = ""):
     """Оновлює статус особи в Missing Persons таблиці після знаходження публікації."""
     try:
+        from gspread.utils import rowcol_to_a1
+        from gspread.utils import a1_range_to_grid_range
+
         spreadsheet = get_spreadsheet()
         ws = spreadsheet.worksheet("missing persons")
         mentions_ws = spreadsheet.worksheet("Mentions")
@@ -143,8 +146,9 @@ def update_missing_person_found(pib: str, mention_text: str = ""):
                     updates = {}
                     current_count = 0
 
+                    # Встановлюємо "Знайдено" в колонці H
                     if len(row) > 7:
-                        updates[f"H{idx}"] = "Так"
+                        updates[f"H{idx}"] = "Знайдено"
 
                     if len(row) > 9:
                         current_count = int(row[9].strip()) if row[9].strip().isdigit() else 0
@@ -162,7 +166,35 @@ def update_missing_person_found(pib: str, mention_text: str = ""):
 
                     if updates:
                         ws.batch_update(updates)
-                        logger.info(f"✅ Оновлено Missing Persons: {pib}")
+
+                    # Фарбуємо рядок в світлий зелений колір
+                    try:
+                        requests = [{
+                            "repeatCell": {
+                                "range": {
+                                    "sheetId": ws.id,
+                                    "startRowIndex": idx - 1,
+                                    "endRowIndex": idx,
+                                },
+                                "cell": {
+                                    "userEnteredFormat": {
+                                        "backgroundColor": {
+                                            "red": 0.8,
+                                            "green": 1.0,
+                                            "blue": 0.8,
+                                            "alpha": 1.0
+                                        }
+                                    }
+                                },
+                                "fields": "userEnteredFormat.backgroundColor"
+                            }
+                        }]
+                        spreadsheet.batch_update({"requests": requests})
+                        logger.info(f"✅ Оновлено Missing Persons: {pib} (фарбування + статус)")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Помилка фарбування рядка {idx}: {e}")
+                        logger.info(f"✅ Оновлено Missing Persons: {pib} (але без фарбування)")
+
                     return True
 
         logger.warning(f"⚠️ Особа {pib} не знайдена в Missing Persons")
