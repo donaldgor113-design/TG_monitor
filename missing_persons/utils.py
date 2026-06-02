@@ -137,68 +137,59 @@ def get_word_forms(word: str) -> Set[str]:
 def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     """
     Шукає особу в тексті з урахуванням морфології та різних форм ПІБ.
+    Вимагає мінімум: ПРІЗВИЩЕ + ІМ'Я (одночасно в близькості).
     Повертає (знайдена, деталь_збігу).
     """
     text_lower = normalize_text(text)
     words = text_lower.split()
 
-    if not person.surname:
+    if not person.surname or not person.name:
         return False, ""
 
     surname_forms = get_word_forms(person.surname)
-    name_forms = get_word_forms(person.name) if person.name else set()
+    name_forms = get_word_forms(person.name)
     patronymic_forms = get_word_forms(person.patronymic) if person.patronymic else set()
 
-    found_surname_word = None
-    found_name_word = None
-    found_patronymic_word = None
-    found_surname = None
-    found_name = None
-    found_patronymic = None
+    # Шукаємо прізвище та ім'я в наборі слів
+    found_surname_idx = None
+    found_name_idx = None
+    found_patronymic_idx = None
 
-    for word in words:
-        # Шукаємо прізвище
-        if found_surname is None:
+    for idx, word in enumerate(words):
+        # Шукаємо прізвище (як окреме слово або початок)
+        if found_surname_idx is None:
             for form in surname_forms:
-                if form and len(form) >= 3 and form in word:
-                    found_surname = person.surname
-                    found_surname_word = word
-                    break
+                if form and len(form) >= 3:
+                    if word == form or word.startswith(form):
+                        found_surname_idx = idx
+                        break
 
-        # Шукаємо ім'я
-        if found_name is None and name_forms:
+        # Шукаємо ім'я (як окреме слово або початок)
+        if found_name_idx is None and name_forms:
             for form in name_forms:
-                if form and len(form) >= 3 and form in word:
-                    found_name = person.name
-                    found_name_word = word
-                    break
+                if form and len(form) >= 3:
+                    if word == form or word.startswith(form):
+                        found_name_idx = idx
+                        break
 
-        # Шукаємо по-батькові
-        if found_patronymic is None and patronymic_forms:
+        # Шукаємо по-батькові (як окреме слово або початок)
+        if found_patronymic_idx is None and patronymic_forms:
             for form in patronymic_forms:
-                if form and len(form) >= 3 and form in word:
-                    found_patronymic = person.patronymic
-                    found_patronymic_word = word
-                    break
+                if form and len(form) >= 3:
+                    if word == form or word.startswith(form):
+                        found_patronymic_idx = idx
+                        break
 
-    # Формуємо результат
-    if found_surname and found_name:
-        if found_patronymic:
-            match_detail = f"{found_surname} {found_name} {found_patronymic}"
-            return True, match_detail
-        else:
-            match_detail = f"{found_surname} {found_name}"
-            return True, match_detail
-
-    # Якщо знайдено прізвище та по-батькові (але не ім'я), це також добре
-    if found_surname and found_patronymic and person.name:
-        match_detail = f"{found_surname} (по-батькові {found_patronymic})"
-        return True, match_detail
-
-    # Якщо знайдено тільки прізвище - це недостатньо точно
-    # (щоб уникнути помилкових результатів як у нас було)
-    if found_surname and not found_name and not found_patronymic:
-        return False, ""
+    # ВИМОГА: мінімум прізвище + ім'я, і вони повинні бути в межах 3 слів один від одного
+    if found_surname_idx is not None and found_name_idx is not None:
+        distance = abs(found_surname_idx - found_name_idx)
+        if distance <= 3:  # У межах 3 слів - це реалістично для "Прізвище Ім'я" або "Прізвище Ім'я По-батькові"
+            if found_patronymic_idx is not None and abs(found_surname_idx - found_patronymic_idx) <= 3:
+                match_detail = f"{person.surname} {person.name} {person.patronymic}"
+                return True, match_detail
+            else:
+                match_detail = f"{person.surname} {person.name}"
+                return True, match_detail
 
     return False, ""
 
