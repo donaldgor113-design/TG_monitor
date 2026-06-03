@@ -4,11 +4,16 @@ from typing import List, Set, Dict, Tuple, Optional
 from dataclasses import dataclass
 
 try:
-    import pymorphy2
-    morph = pymorphy2.MorphAnalyzer(lang='uk')
+    import pymorphy3
+    morph = pymorphy3.MorphAnalyzer(lang='uk')
     MORPH_AVAILABLE = True
 except:
-    MORPH_AVAILABLE = False
+    try:
+        import pymorphy2
+        morph = pymorphy2.MorphAnalyzer(lang='uk')
+        MORPH_AVAILABLE = True
+    except:
+        MORPH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +103,21 @@ def is_patronymic_form(word: str) -> bool:
     return len(word) > 6 and bool(PATRONYMIC_RE.match(word.lower()))
 
 
+def get_lemma(word: str) -> str:
+    """Повертає словникову форму слова (лему) через pymorphy3."""
+    if not word or not MORPH_AVAILABLE:
+        return word.lower()
+    try:
+        parsed = morph.parse(word.lower())
+        if parsed and parsed[0].normal_form:
+            return parsed[0].normal_form.lower()
+    except:
+        pass
+    return word.lower()
+
+
 def get_all_forms(word: str) -> Set[str]:
-    """Генерує всі граматичні форми слова (всі відмінки) через pymorphy2."""
+    """Генерує всі граматичні форми слова (всі відмінки) через pymorphy3."""
     forms = {word.lower()}
     if not word or len(word) < 2:
         return forms
@@ -114,6 +132,19 @@ def get_all_forms(word: str) -> Set[str]:
         except:
             pass
     return forms
+
+
+def word_matches(text_word: str, search_forms: Set[str], search_lemma: str) -> bool:
+    """
+    Перевіряє чи слово з тексту відповідає пошуковому терміну.
+    Метод 1: пряме співпадіння в наборі згенерованих форм.
+    Метод 2: лема слова з тексту = лема пошукового терміну.
+    """
+    if text_word in search_forms:
+        return True
+    if MORPH_AVAILABLE:
+        return get_lemma(text_word) == search_lemma
+    return False
 
 
 def extract_birth_date(text: str) -> Optional[str]:
@@ -154,9 +185,10 @@ def _norm_date(date_str: str) -> str:
 
 def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     """
-    Шукає особу в тексті по всіх відмінках прізвища, імені, по-батькові.
-    Вимагає: ПРІЗВИЩЕ + ІМ'Я в межах 4 слів (точне співпадіння форм).
-    Якщо в тексті є дата р.н. І у особи є дата нар. в базі — вони ОБОВ'ЯЗКОВО мають збігатись.
+    Шукає ПОВНЕ ПІБ особи в тексті по всіх відмінках.
+    - Якщо в базі є по-батькові: обов'язково ПРІЗВИЩЕ + ІМ'Я + ПО-БАТЬКОВІ, всі три поруч
+    - Якщо в базі немає по-батькові: ПРІЗВИЩЕ + ІМ'Я
+    - Якщо в тексті є дата р.н. І в базі є дата народження — вони ОБОВ'ЯЗКОВО мають збігатись
     """
     if not person.surname or not person.name:
         return False, ""
@@ -165,25 +197,38 @@ def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     words = text_lower.split()
 
     surname_forms = get_all_forms(person.surname)
+    surname_lemma = get_lemma(person.surname)
     name_forms = get_all_forms(person.name)
+    name_lemma = get_lemma(person.name)
     patronymic_forms = get_all_forms(person.patronymic) if person.patronymic else set()
+    patronymic_lemma = get_lemma(person.patronymic) if person.patronymic else ""
 
     found_surname_idx = None
     found_name_idx = None
     found_patronymic_idx = None
 
     for idx, word in enumerate(words):
-        if found_surname_idx is None and word in surname_forms:
+        if found_surname_idx is None and word_matches(word, surname_forms, surname_lemma):
             found_surname_idx = idx
-        if found_name_idx is None and word in name_forms:
+        if found_name_idx is None and word_matches(word, name_forms, name_lemma):
             found_name_idx = idx
-        if found_patronymic_idx is None and patronymic_forms and word in patronymic_forms:
-            found_patronymic_idx = idx
+        if found_patronymic_idx is None and person.patronymic:
+            if word_matches(word, patronymic_forms, patronymic_lemma):
+                found_patronymic_idx = idx
 
+    # Прізвище і ім'я обов'язкові
     if found_surname_idx is None or found_name_idx is None:
         return False, ""
 
-    if abs(found_surname_idx - found_name_idx) > 4:
+    # По-батькові обов'язкове якщо є в базі
+    if person.patronymic and found_patronymic_idx is None:
+        return False, ""
+
+    # Всі знайдені частини мають бути поруч (в межах 5 слів між крайніми)
+    indices = [found_surname_idx, found_name_idx]
+    if found_patronymic_idx is not None:
+        indices.append(found_patronymic_idx)
+    if max(indices) - min(indices) > 5:
         return False, ""
 
     # Перевірка дати народження: якщо в тексті є р.н. І в базі є дата — мають збігатись
@@ -193,7 +238,7 @@ def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
             if _norm_date(text_birth_date) != _norm_date(person.birth_date):
                 return False, ""
 
-    if found_patronymic_idx is not None and abs(found_surname_idx - found_patronymic_idx) <= 4:
+    if found_patronymic_idx is not None:
         return True, f"{person.surname} {person.name} {person.patronymic}"
     return True, f"{person.surname} {person.name}"
 
