@@ -12,6 +12,9 @@ except:
 
 logger = logging.getLogger(__name__)
 
+# По-батькові завжди містять ці суфікси: -ович/-овна та їх варіанти
+PATRONYMIC_RE = re.compile(r'^.{3,}(ович|евич|євич|овна|евна|євна|івна|ївна)', re.IGNORECASE)
+
 CYRILLIC_TO_LATIN = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
     'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
@@ -90,106 +93,71 @@ def normalize_text(text: str) -> str:
     return text
 
 
-def get_word_root(word: str) -> str:
-    """Отримати корінь слова для більш гнучкого пошуку."""
-    if not word or len(word) < 3:
-        return word.lower()
+def is_patronymic_form(word: str) -> bool:
+    """Визначає, чи слово є по-батькові (містить суфікс -ович/-овна тощо)."""
+    return len(word) > 6 and bool(PATRONYMIC_RE.match(word.lower()))
 
-    word_lower = word.lower().strip()
 
+def get_lemma(word: str) -> str:
+    """Повертає нормальну (словникову) форму слова через pymorphy2."""
+    if not word:
+        return ""
+    w = word.lower().strip()
     if MORPH_AVAILABLE:
         try:
-            parsed = morph.parse(word_lower)
+            parsed = morph.parse(w)
             if parsed and parsed[0].normal_form:
-                normal = parsed[0].normal_form.lower()
-                if len(normal) >= 3:
-                    return normal
+                return parsed[0].normal_form.lower()
         except:
             pass
-
-    # Навіть без морфаналізу повертаємо слово як є
-    return word_lower
-
-
-def get_word_forms(word: str) -> Set[str]:
-    """Отримати можливі варіанти слова для пошуку."""
-    if not word or len(word) < 2:
-        return {word.lower()}
-
-    forms = set()
-    word = word.lower().strip()
-    forms.add(word)
-
-    # Додаємо корінь слова
-    root = get_word_root(word)
-    if root and len(root) >= 3:
-        forms.add(root)
-
-    # Для коротких слів (імена) додаємо перші 3+ символи
-    if len(word) >= 4:
-        forms.add(word[:len(word)-1])  # без останньої букви (может быть закінченням)
-        if len(word) >= 5:
-            forms.add(word[:len(word)-2])  # без останніх двох букв
-
-    return forms
+    return w
 
 
 def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     """
-    Шукає особу в тексті з урахуванням морфології та різних форм ПІБ.
-    Вимагає мінімум: ПРІЗВИЩЕ + ІМ'Я (одночасно в близькості).
-    Повертає (знайдена, деталь_збігу).
+    Шукає особу в тексті через порівняння лем (нормальних форм слів).
+    Вимагає: ПРІЗВИЩЕ + ІМ'Я одночасно в межах 3 слів.
+    Слова-по-батькові (-ович/-овна) ніколи не матчаться з прізвищем чи ім'ям.
     """
-    text_lower = normalize_text(text)
-    words = text_lower.split()
-
     if not person.surname or not person.name:
         return False, ""
 
-    surname_forms = get_word_forms(person.surname)
-    name_forms = get_word_forms(person.name)
-    patronymic_forms = get_word_forms(person.patronymic) if person.patronymic else set()
+    text_lower = normalize_text(text)
+    words = text_lower.split()
 
-    # Шукаємо прізвище та ім'я в наборі слів
+    surname_lemma = get_lemma(person.surname)
+    name_lemma = get_lemma(person.name)
+    patronymic_lemma = get_lemma(person.patronymic) if person.patronymic else None
+
     found_surname_idx = None
     found_name_idx = None
     found_patronymic_idx = None
 
     for idx, word in enumerate(words):
-        # Шукаємо прізвище (як окреме слово або початок)
-        if found_surname_idx is None:
-            for form in surname_forms:
-                if form and len(form) >= 3:
-                    if word == form or word.startswith(form):
-                        found_surname_idx = idx
-                        break
+        word_lemma = get_lemma(word)
+        word_is_patronymic = is_patronymic_form(word)
 
-        # Шукаємо ім'я (як окреме слово або початок)
-        if found_name_idx is None and name_forms:
-            for form in name_forms:
-                if form and len(form) >= 3:
-                    if word == form or word.startswith(form):
-                        found_name_idx = idx
-                        break
+        # Прізвище: слово НЕ є по-батькові + лема збігається
+        if found_surname_idx is None and not word_is_patronymic:
+            if word_lemma == surname_lemma:
+                found_surname_idx = idx
 
-        # Шукаємо по-батькові (як окреме слово або початок)
-        if found_patronymic_idx is None and patronymic_forms:
-            for form in patronymic_forms:
-                if form and len(form) >= 3:
-                    if word == form or word.startswith(form):
-                        found_patronymic_idx = idx
-                        break
+        # Ім'я: слово НЕ є по-батькові + лема збігається
+        if found_name_idx is None and not word_is_patronymic:
+            if word_lemma == name_lemma:
+                found_name_idx = idx
 
-    # ВИМОГА: мінімум прізвище + ім'я, і вони повинні бути в межах 3 слів один від одного
+        # По-батькові: слово є по-батькові формою + лема збігається
+        if found_patronymic_idx is None and patronymic_lemma and word_is_patronymic:
+            if word_lemma == patronymic_lemma:
+                found_patronymic_idx = idx
+
+    # Мінімум: прізвище + ім'я в межах 3 слів
     if found_surname_idx is not None and found_name_idx is not None:
-        distance = abs(found_surname_idx - found_name_idx)
-        if distance <= 3:  # У межах 3 слів - це реалістично для "Прізвище Ім'я" або "Прізвище Ім'я По-батькові"
-            if found_patronymic_idx is not None and abs(found_surname_idx - found_patronymic_idx) <= 3:
-                match_detail = f"{person.surname} {person.name} {person.patronymic}"
-                return True, match_detail
-            else:
-                match_detail = f"{person.surname} {person.name}"
-                return True, match_detail
+        if abs(found_surname_idx - found_name_idx) <= 3:
+            if found_patronymic_idx is not None:
+                return True, f"{person.surname} {person.name} {person.patronymic}"
+            return True, f"{person.surname} {person.name}"
 
     return False, ""
 
