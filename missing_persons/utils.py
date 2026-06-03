@@ -1,6 +1,6 @@
 import re
 import logging
-from typing import List, Set, Dict, Tuple
+from typing import List, Set, Dict, Tuple, Optional
 from dataclasses import dataclass
 
 try:
@@ -98,26 +98,65 @@ def is_patronymic_form(word: str) -> bool:
     return len(word) > 6 and bool(PATRONYMIC_RE.match(word.lower()))
 
 
-def get_lemma(word: str) -> str:
-    """Повертає нормальну (словникову) форму слова через pymorphy2."""
-    if not word:
-        return ""
-    w = word.lower().strip()
+def get_all_forms(word: str) -> Set[str]:
+    """Генерує всі граматичні форми слова (всі відмінки) через pymorphy2."""
+    forms = {word.lower()}
+    if not word or len(word) < 2:
+        return forms
     if MORPH_AVAILABLE:
         try:
-            parsed = morph.parse(w)
-            if parsed and parsed[0].normal_form:
-                return parsed[0].normal_form.lower()
+            parsed = morph.parse(word.lower())
+            if parsed:
+                for form in parsed[0].lexeme:
+                    f = form.word.lower()
+                    if f:
+                        forms.add(f)
         except:
             pass
-    return w
+    return forms
+
+
+def extract_birth_date(text: str) -> Optional[str]:
+    """
+    Витягує дату народження з тексту (маркер р.н.).
+    Повертає рядок DD.MM.YYYY або None.
+    """
+    # Дата перед р.н.: "15.08.1970р.н", "12.07.1986.р.н.", "03.09.1977 р.н."
+    m = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})[.\s]*р\.?\s*н', text, re.IGNORECASE)
+    if m:
+        try:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 1 <= d <= 31 and 1 <= mo <= 12 and 1900 <= y <= 2010:
+                return f"{d:02d}.{mo:02d}.{y}"
+        except:
+            pass
+    # р.н. перед датою: "р.н. 15.08.1970"
+    m = re.search(r'р\.?\s*н\.?\s*(\d{1,2})[./](\d{1,2})[./](\d{4})', text, re.IGNORECASE)
+    if m:
+        try:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 1 <= d <= 31 and 1 <= mo <= 12 and 1900 <= y <= 2010:
+                return f"{d:02d}.{mo:02d}.{y}"
+        except:
+            pass
+    return None
+
+
+def _norm_date(date_str: str) -> str:
+    """Нормалізує дату до формату DD.MM.YYYY."""
+    if not date_str:
+        return ""
+    m = re.match(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', date_str.strip())
+    if m:
+        return f"{int(m.group(1)):02d}.{int(m.group(2)):02d}.{m.group(3)}"
+    return date_str.strip()
 
 
 def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     """
-    Шукає особу в тексті через порівняння лем (нормальних форм слів).
-    Вимагає: ПРІЗВИЩЕ + ІМ'Я одночасно в межах 3 слів.
-    Слова-по-батькові (-ович/-овна) ніколи не матчаться з прізвищем чи ім'ям.
+    Шукає особу в тексті по всіх відмінках прізвища, імені, по-батькові.
+    Вимагає: ПРІЗВИЩЕ + ІМ'Я в межах 4 слів (точне співпадіння форм).
+    Якщо в тексті є дата р.н. І у особи є дата нар. в базі — вони ОБОВ'ЯЗКОВО мають збігатись.
     """
     if not person.surname or not person.name:
         return False, ""
@@ -125,41 +164,38 @@ def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     text_lower = normalize_text(text)
     words = text_lower.split()
 
-    surname_lemma = get_lemma(person.surname)
-    name_lemma = get_lemma(person.name)
-    patronymic_lemma = get_lemma(person.patronymic) if person.patronymic else None
+    surname_forms = get_all_forms(person.surname)
+    name_forms = get_all_forms(person.name)
+    patronymic_forms = get_all_forms(person.patronymic) if person.patronymic else set()
 
     found_surname_idx = None
     found_name_idx = None
     found_patronymic_idx = None
 
     for idx, word in enumerate(words):
-        word_lemma = get_lemma(word)
-        word_is_patronymic = is_patronymic_form(word)
+        if found_surname_idx is None and word in surname_forms:
+            found_surname_idx = idx
+        if found_name_idx is None and word in name_forms:
+            found_name_idx = idx
+        if found_patronymic_idx is None and patronymic_forms and word in patronymic_forms:
+            found_patronymic_idx = idx
 
-        # Прізвище: слово НЕ є по-батькові + лема збігається
-        if found_surname_idx is None and not word_is_patronymic:
-            if word_lemma == surname_lemma:
-                found_surname_idx = idx
+    if found_surname_idx is None or found_name_idx is None:
+        return False, ""
 
-        # Ім'я: слово НЕ є по-батькові + лема збігається
-        if found_name_idx is None and not word_is_patronymic:
-            if word_lemma == name_lemma:
-                found_name_idx = idx
+    if abs(found_surname_idx - found_name_idx) > 4:
+        return False, ""
 
-        # По-батькові: слово є по-батькові формою + лема збігається
-        if found_patronymic_idx is None and patronymic_lemma and word_is_patronymic:
-            if word_lemma == patronymic_lemma:
-                found_patronymic_idx = idx
+    # Перевірка дати народження: якщо в тексті є р.н. І в базі є дата — мають збігатись
+    if person.birth_date:
+        text_birth_date = extract_birth_date(text)
+        if text_birth_date is not None:
+            if _norm_date(text_birth_date) != _norm_date(person.birth_date):
+                return False, ""
 
-    # Мінімум: прізвище + ім'я в межах 3 слів
-    if found_surname_idx is not None and found_name_idx is not None:
-        if abs(found_surname_idx - found_name_idx) <= 3:
-            if found_patronymic_idx is not None:
-                return True, f"{person.surname} {person.name} {person.patronymic}"
-            return True, f"{person.surname} {person.name}"
-
-    return False, ""
+    if found_patronymic_idx is not None and abs(found_surname_idx - found_patronymic_idx) <= 4:
+        return True, f"{person.surname} {person.name} {person.patronymic}"
+    return True, f"{person.surname} {person.name}"
 
 
 def latin_to_cyrillic(text: str) -> str:
