@@ -7,9 +7,9 @@ from aiogram.types import ReplyKeyboardRemove
 
 from config import is_admin, load_data, save_data, notify_owners
 from keyboards import main_menu, missing_persons_menu, management_menu
-from missing_persons.sheets_sync import load_missing_persons, load_missing_channels, load_all_existing_urls, append_to_mentions, detect_status_from_text
+from missing_persons.sheets_sync import load_missing_persons, load_missing_channels, detect_status_from_text
 from missing_persons.search_engine import search_in_batch
-from missing_persons.database import save_mention, get_mentions_count
+from missing_persons.database import get_mentions_count
 from missing_persons.utils import PersonData
 from states import SearchMissingPerson
 
@@ -51,7 +51,6 @@ async def search_pib(msg: types.Message, state: FSMContext):
 
     try:
         channels = load_missing_channels()
-        existing_urls = load_all_existing_urls()
 
         if not channels:
             await msg.answer(
@@ -73,7 +72,7 @@ async def search_pib(msg: types.Message, state: FSMContext):
         persons = {pib: person}
         try:
             mentions = await asyncio.wait_for(
-                search_in_batch(channels, persons, existing_urls),
+                search_in_batch(channels, persons, set(), mention_type="manual_search"),
                 timeout=600  # 10 хвилин максимум
             )
         except asyncio.TimeoutError:
@@ -87,23 +86,9 @@ async def search_pib(msg: types.Message, state: FSMContext):
             return
 
         if mentions:
-            # Запис в Google Sheets
-            append_to_mentions(mentions)
-            for mention in mentions:
-                save_mention(
-                    pib=mention["pib"],
-                    channel=mention["channel"],
-                    message_id=mention["message_id"],
-                    url=mention["url"],
-                    text=mention["text"],
-                    post_date=mention["date"],
-                    post_time=mention["time"],
-                    mention_type="manual_search"
-                )
-
             result_text = (
                 f"🎯 <b>Знайдено {len(mentions)} згадок про {pib}:</b>\n"
-                f"📡 Перевірено каналів: <b>{len(channels)}</b> (до 300 публікацій кожен)\n\n"
+                f"📡 Перевірено каналів: <b>{len(channels)}</b> (до 700 публікацій кожен)\n\n"
             )
             for i, m in enumerate(mentions[:5], 1):
                 channel = m['channel']
@@ -117,9 +102,7 @@ async def search_pib(msg: types.Message, state: FSMContext):
                     f"   📝 {short_text}...\n\n"
                 )
             if len(mentions) > 5:
-                result_text += f"+ ще {len(mentions) - 5} результатів\n\n"
-
-            result_text += "✅ Всі результати записані в Google Sheets 'Mentions'"
+                result_text += f"+ ще {len(mentions) - 5} результатів\n"
 
             await msg.answer(result_text, parse_mode="HTML", reply_markup=missing_persons_menu())
         else:

@@ -174,7 +174,11 @@ def update_missing_person_found(pib: str, mention_text: str = ""):
                         updates[f"M{idx}"] = short_text
 
                     if updates:
-                        ws.batch_update(updates)
+                        try:
+                            update_data = [{"range": cell_ref, "values": [[val]]} for cell_ref, val in updates.items()]
+                            ws.batch_update(update_data)
+                        except Exception as e:
+                            logger.warning(f"⚠️ Помилка оновлення колонок {pib}: {e}")
 
                     # Фарбуємо рядок в світлий зелений колір
                     try:
@@ -233,6 +237,9 @@ def append_to_mentions(mentions: List[Dict]):
             channel_username = mention.get("channel", "")
             channel_url = f"https://t.me/{channel_username}" if channel_username else ""
 
+            from datetime import datetime
+            recorded_at = datetime.now().strftime("%d.%m.%Y %H:%M")
+
             row = [
                 next_num,
                 surname,
@@ -244,6 +251,7 @@ def append_to_mentions(mentions: List[Dict]):
                 mention.get("time", ""),
                 text,
                 mention.get("url", ""),
+                recorded_at,
             ]
             ws.insert_row(row, index=2)
             next_num += 1

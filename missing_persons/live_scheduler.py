@@ -52,7 +52,7 @@ async def run_live_search(bot=None):
             from config import get_owner_ids
             text = (
                 f"🎯 <b>Live пошук зниклих</b>\n"
-                f"📡 Перевірено каналів: <b>{len(channels)}</b> (до 300 публікацій кожен)\n"
+                f"📡 Перевірено каналів: <b>{len(channels)}</b> (до 700 публікацій кожен)\n"
                 f"👥 Знайдено згадок: <b>{len(mentions)}</b>\n\n"
             )
             for i, m in enumerate(mentions[:10], 1):

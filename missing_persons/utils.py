@@ -220,10 +220,6 @@ def search_person_in_text(text: str, person: PersonData) -> Tuple[bool, str]:
     if found_surname_idx is None or found_name_idx is None:
         return False, ""
 
-    # По-батькові обов'язкове якщо є в базі
-    if person.patronymic and found_patronymic_idx is None:
-        return False, ""
-
     # Всі знайдені частини мають бути поруч (в межах 5 слів між крайніми)
     indices = [found_surname_idx, found_name_idx]
     if found_patronymic_idx is not None:

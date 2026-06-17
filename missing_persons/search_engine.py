@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
-                           existing_urls: Set[str], limit: int = 300) -> List[Dict]:
+                           existing_urls: Set[str], limit: int = 700, mention_type: str = "missing") -> List[Dict]:
     mentions = []
     try:
         async for message in userbot.iter_messages(channel, limit=limit):
@@ -18,7 +18,7 @@ async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
                 continue
 
             url = f"https://t.me/{channel}/{message.id}"
-            if url in existing_urls or check_url_exists(url):
+            if url in existing_urls:
                 continue
 
             for full_name, person in person_names.items():
@@ -37,7 +37,7 @@ async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
                         "text": escape_html(message.text),
                         "date": pub_date,
                         "time": message.date.strftime("%H:%M:%S"),
-                        "mention_type": "missing",
+                        "mention_type": mention_type,
                         "match_detail": match_detail,
                     }
                     mentions.append(mention)
@@ -56,7 +56,7 @@ async def search_in_channel(channel: str, person_names: Dict[str, PersonData],
 
 async def search_in_batch(channels: List[str], person_names: Dict[str, PersonData],
                           existing_urls: Set[str], batch_size: int = 5,
-                          batch_pause: int = 45, channel_delay: float = 3) -> List[Dict]:
+                          batch_pause: int = 45, channel_delay: float = 3, mention_type: str = "missing") -> List[Dict]:
     all_mentions = []
 
     for i in range(0, len(channels), batch_size):
@@ -65,7 +65,7 @@ async def search_in_batch(channels: List[str], person_names: Dict[str, PersonDat
 
         batch_mentions = []
         for channel in batch:
-            mentions = await search_in_channel(channel, person_names, existing_urls)
+            mentions = await search_in_channel(channel, person_names, existing_urls, mention_type=mention_type)
             batch_mentions.extend(mentions)
             await asyncio.sleep(channel_delay)
 
