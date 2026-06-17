@@ -5,7 +5,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardRemove
 
-from config import get_admin_ids, get_owner_ids, is_admin, is_owner, load_data, save_data, notify_owners
+from config import (get_admin_ids, get_owner_ids, is_admin, is_owner, load_data, save_data, notify_owners,
+                    __author__, __organization__, __phone__, __email__, __version__, __copyright__)
 from keyboards import main_menu, management_menu, missing_persons_menu, classifier_mode_keyboard
 from keywords import get_classifier_mode_label
 from states import AddAdminUser, AddChannel, AddKeyword, DeleteAdminUser, DeleteChannel, DeleteKeyword
@@ -17,6 +18,21 @@ logger = logging.getLogger(__name__)
 
 def _menu_for(user_id: int, data: dict | None = None):
     return main_menu(is_owner=is_owner(user_id, data))
+
+
+# ── /about ──────────────────────────────────────────────
+@router.message(Command("about"))
+@router.message(F.text == "ℹ️ Про бота")
+async def cmd_about(msg: types.Message):
+    await msg.answer(
+        f"ℹ️ <b>TG Monitor Bot</b>  v{__version__}\n\n"
+        f"👤 <b>Розробник:</b> {__author__}\n"
+        f"🏛 <b>Організація:</b> {__organization__}\n"
+        f"📞 <b>Телефон:</b> {__phone__}\n"
+        f"📧 <b>Email:</b> {__email__}\n\n"
+        f"© {__copyright__} — Всі права захищені",
+        parse_mode="HTML"
+    )
 
 
 # ── /start ──────────────────────────────────────────────

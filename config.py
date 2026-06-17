@@ -1,4 +1,12 @@
 # config.py
+
+__author__       = "Купльовський Н.І."
+__organization__ = "УКА ГУНП в Тернопільській області"
+__phone__        = "+380965215462"
+__email__        = "nazarkuplovsky@gmail.com"
+__version__      = "1.0.3"
+__copyright__    = "2026"
+
 import os
 import json
 import logging

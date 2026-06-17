@@ -15,6 +15,7 @@ def main_menu(is_owner: bool = False) -> ReplyKeyboardMarkup:
         [KeyboardButton(text="📋 Статус"),          KeyboardButton(text="🔍 Пошук по архіву")],
         [KeyboardButton(text="🟢 Моніторинг live"), KeyboardButton(text="⏹ Стоп")],
         [KeyboardButton(text="⚙️ Управління"),       KeyboardButton(text="🆘 Пошук зниклих")],
+        [KeyboardButton(text="ℹ️ Про бота")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
